@@ -45,7 +45,7 @@ namespace MeetingMinutes.Data
             {
                 E.Property("DateCreated").CurrentValue = DateTime.Now;
                 E.Property("DateUpdated").CurrentValue = DateTime.Now;
-                if (DateTime.Parse(E.Property("MeetingDate").CurrentValue.ToString()) > DateTime.Now)
+                if ((DateTime)E.Property("MeetingDate").CurrentValue > DateTime.Now)
                 {
                     E.Property("Status").CurrentValue = Status.New;
                 }
@@ -60,8 +60,13 @@ namespace MeetingMinutes.Data
 
             AddedMeetingItemsEntities.ForEach(E =>
             {
-                var Meeting = ChangeTracker.Entries().Where(M => M.Property("MeetingID") == E.Property("Meetingid").CurrentValue).ToList();
-                Meeting.ForEach(E => E.Property("Status").CurrentValue = Status.Started);
+                // Mark the parent meeting as Started. The old code compared a PropertyEntry with an object
+                // (always false) and called Property("MeetingID") on entities that have no such property (throws).
+                var meetingId = (int)E.Property("Meetingid").CurrentValue;
+                foreach (var tracked in ChangeTracker.Entries<Meeting>().Where(t => t.Entity.MeetingID == meetingId))
+                {
+                    tracked.Entity.Status = Status.Started;
+                }
             });
 
             var EditedMeetingEntities = ChangeTracker.Entries()
@@ -72,7 +77,7 @@ namespace MeetingMinutes.Data
             {
                 E.Property("DateCreated").IsModified = false;
                 E.Property("DateUpdated").CurrentValue = DateTime.Now;
-                if (DateTime.Parse(E.Property("MeetingDate").CurrentValue.ToString()) > DateTime.Now)
+                if ((DateTime)E.Property("MeetingDate").CurrentValue > DateTime.Now)
                 {
                     E.Property("Status").CurrentValue = Status.New;
                 }

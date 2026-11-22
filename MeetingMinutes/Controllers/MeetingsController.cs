@@ -45,7 +45,7 @@ namespace MeetingMinutes.Controllers
                                   Id = user.Id,
                                   FullName = user.FullName,
                                   Checked = ((from ab in _context.MeetingParticipants
-                                              where (ab.MeetingId == meeting.MeetingID) & (ab.UserId == user.Id)
+                                              where (ab.MeetingId == meeting.MeetingID) && (ab.UserId == user.Id)
                                               select ab).Count() > 0),
                               };
                 var MyViewModel = new MeetingViewModel();
@@ -91,7 +91,7 @@ namespace MeetingMinutes.Controllers
                                   Id = user.Id,
                                   FullName = user.FullName,
                                   Checked = ((from ab in _context.MeetingParticipants
-                                              where (ab.MeetingId == meeting.MeetingID) & (ab.UserId == user.Id)
+                                              where (ab.MeetingId == meeting.MeetingID) && (ab.UserId == user.Id)
                                               select ab).Count() > 0),
                               };
                 var MyViewModel = new MeetingViewModel();
@@ -142,7 +142,7 @@ namespace MeetingMinutes.Controllers
                               Id = user.Id,
                               FullName = user.FullName,
                               Checked = ((from ab in _context.MeetingParticipants
-                                          where (ab.MeetingId == id) & (ab.UserId == user.Id)
+                                          where (ab.MeetingId == id) && (ab.UserId == user.Id)
                                           select ab).Count() > 0),
                           };
             var MyViewModel = new MeetingViewModel();
@@ -242,7 +242,7 @@ namespace MeetingMinutes.Controllers
                 };
                 _context.Add(MyMeeting);
                 await _context.SaveChangesAsync();
-                foreach (var participant in meeting.MeetingParticipants)
+                foreach (var participant in meeting.MeetingParticipants ?? new List<CheckBoxViewModel>())
                 {
                     if (participant.IsChecked)
                     {
@@ -279,17 +279,21 @@ namespace MeetingMinutes.Controllers
         //[HttpPost]
         public IActionResult Selection(int meetingId)
         {
+            Meeting meeting = _context.Meetings
+                .FirstOrDefault(m => m.MeetingID == meetingId);
+            if (meeting == null)
+            {
+                return NotFound();
+            }
             MasterDetailViewModel model = new MasterDetailViewModel
             {
                 Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
+                SelectedMeeting = meeting,
                 SelectedMeetingItem = null,
                 DataEntryTarget = DataEntryTargets.Meetings,
                 DataDisplayMode = DataDisplayModes.Read
 
             };
-            Meeting meeting = _context.Meetings
-                .FirstOrDefault(m => m.MeetingID == meetingId);
             meeting.Status = Status.Started;
             _context.Update(meeting);
             _context.SaveChanges();
@@ -300,6 +304,10 @@ namespace MeetingMinutes.Controllers
         [HttpPost]
         public IActionResult Select(int meetingId)
         {
+            if (!_context.Meetings.Any(m => m.MeetingID == meetingId))
+            {
+                return NotFound();
+            }
             MasterDetailViewModel model = new MasterDetailViewModel
             {
                 Meetings = _context.Meetings.ToList(),
@@ -350,7 +358,7 @@ namespace MeetingMinutes.Controllers
                               Id = user.Id,
                               FullName = user.FullName,
                               Checked = ((from ab in _context.MeetingParticipants
-                                          where (ab.MeetingId == id) & (ab.UserId == user.Id)
+                                          where (ab.MeetingId == id) && (ab.UserId == user.Id)
                                           select ab).Count() > 0),
                           };
             var MyViewModel = new MeetingViewModel();
@@ -394,19 +402,18 @@ namespace MeetingMinutes.Controllers
                 try
                 {
                     var MyMeeting = _context.Meetings.Find(id);
-                    MyMeeting.MeetingID = id;
+                    if (MyMeeting == null)
+                    {
+                        return NotFound();
+                    }
                     MyMeeting.MeetingDate = meeting.MeetingDate;
                     MyMeeting.ExternalParticipants = meeting.ExternalParticipants;
                     MyMeeting.Status = meeting.Status;
                     MyMeeting.Title = meeting.Title;
-                    foreach (var participant in _context.MeetingParticipants)
-                    {
-                        if (participant.MeetingId == id)
-                        {
-                            _context.Entry(participant).State = EntityState.Deleted;
-                        }
-                    }
-                    foreach (var participant in meeting.MeetingParticipants)
+                    // only this meeting's rows (previously the whole table was loaded and scanned)
+                    _context.MeetingParticipants.RemoveRange(
+                        _context.MeetingParticipants.Where(p => p.MeetingId == id));
+                    foreach (var participant in meeting.MeetingParticipants ?? new List<CheckBoxViewModel>())
                     {
                         if (participant.IsChecked)
                         {
@@ -438,6 +445,10 @@ namespace MeetingMinutes.Controllers
         public IActionResult Finish(int id) {
             Meeting meeting = _context.Meetings
                 .FirstOrDefault(m => m.MeetingID == id);
+            if (meeting == null)
+            {
+                return NotFound();
+            }
             meeting.Status = Status.Finished;
             _context.Update(meeting);
             _context.SaveChanges();
@@ -464,7 +475,7 @@ namespace MeetingMinutes.Controllers
                               Id = user.Id,
                               FullName = user.FullName,
                               Checked = ((from ab in _context.MeetingParticipants
-                                          where (ab.MeetingId == id) & (ab.UserId == user.Id)
+                                          where (ab.MeetingId == id) && (ab.UserId == user.Id)
                                           select ab).Count() > 0),
                           };
             var MyViewModel = new MeetingViewModel();
@@ -497,6 +508,10 @@ namespace MeetingMinutes.Controllers
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var meeting = await _context.Meetings.FindAsync(id);
+            if (meeting == null)
+            {
+                return NotFound();
+            }
             _context.Meetings.Remove(meeting);
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Upcoming));

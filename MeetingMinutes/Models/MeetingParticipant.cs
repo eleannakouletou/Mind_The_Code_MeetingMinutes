@@ -14,7 +14,7 @@ namespace MeetingMinutes.Models
 
         public string UserId { get; set; }
         public virtual ApplicationUser User { get; set; }
-        [ForeignKey("FK_Meeting")]
+        [ForeignKey("Meeting")]
         public int MeetingId { get; set; }
 
         public virtual Meeting Meeting { get; set; }
