@@ -9,9 +9,12 @@ using MeetingMinutes.Data;
 using MeetingMinutes.Models;
 using Microsoft.AspNetCore.Hosting;
 using System.IO;
+using Microsoft.AspNetCore.Authorization;
 
 namespace MeetingMinutes.Controllers
 {
+    [Authorize]
+    [AutoValidateAntiforgeryToken]
     public class MeetingItemsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -42,7 +45,7 @@ namespace MeetingMinutes.Controllers
             var meetingItem = await _context.MeetingItems
                 .Include(m => m.Meeting)
                 .Include(m => m.RiskLevel)
-                .FirstOrDefaultAsync(m => m.Meetingid== id);
+                .FirstOrDefaultAsync(m => m.MeetingItemID == id);
             if (meetingItem == null)
             {
                 return NotFound();
@@ -54,8 +57,8 @@ namespace MeetingMinutes.Controllers
         // GET: MeetingItems/Create
         public IActionResult Create(int meetingid)
         {
-            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "CreatedBy", meetingid);
-            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "RiskLevelID");
+            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "Title", meetingid);
+            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "Name");
             return View();
         }
 
@@ -72,8 +75,8 @@ namespace MeetingMinutes.Controllers
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "CreatedBy", meetingItem.Meetingid);
-            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "RiskLevelID", meetingItem.RiskLevelid);
+            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "Title", meetingItem.Meetingid);
+            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "Name", meetingItem.RiskLevelid);
             return View(meetingItem);
         }
 
@@ -90,8 +93,8 @@ namespace MeetingMinutes.Controllers
             {
                 return NotFound();
             }
-            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "CreatedBy", meetingItem.Meetingid);
-            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "RiskLevelID", meetingItem.RiskLevelid);
+            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "Title", meetingItem.Meetingid);
+            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "Name", meetingItem.RiskLevelid);
             return View(meetingItem);
         }
 
@@ -127,252 +130,172 @@ namespace MeetingMinutes.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "CreatedBy", meetingItem.Meetingid);
-            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "RiskLevelID", meetingItem.RiskLevelid);
+            ViewData["Meetingid"] = new SelectList(_context.Meetings, "MeetingID", "Title", meetingItem.Meetingid);
+            ViewData["RiskLevelid"] = new SelectList(_context.RiskLevels, "RiskLevelID", "Name", meetingItem.RiskLevelid);
             return View(meetingItem);
+        }
+
+        // Builds the master/detail "Main" view. Returns NotFound when the meeting does not exist
+        // (previously every action threw a NullReferenceException in that case).
+        private IActionResult MasterDetail(int meetingId, MeetingItem selectedItem, DataDisplayModes mode)
+        {
+            var meeting = _context.Meetings.Find(meetingId);
+            if (meeting == null)
+            {
+                return NotFound();
+            }
+
+            var model = new MasterDetailViewModel
+            {
+                Meetings = _context.Meetings.ToList(),
+                SelectedMeeting = meeting,
+                SelectedMeetingItem = selectedItem,
+                DataEntryTarget = DataEntryTargets.MeetingItems,
+                DataDisplayMode = mode
+            };
+            _context.Entry(meeting).Collection(m => m.MeetingItems).Load();
+
+            ViewBag.RiskLevels = new SelectList(_context.RiskLevels, "RiskLevelID", "Name", selectedItem?.RiskLevelid);
+            ViewBag.RiskLevel = selectedItem == null
+                ? null
+                : _context.RiskLevels.Where(l => l.RiskLevelID == selectedItem.RiskLevelid).Select(l => l.Name).FirstOrDefault();
+
+            return View("Main", model);
         }
 
         public IActionResult ListItems(int meetingId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
-
-            };
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-            return View("Main", model);
+            return MasterDetail(meetingId, null, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult List(int meetingId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
-
-            };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-            return View("Main", model);
+            return MasterDetail(meetingId, null, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult Select(int meetingId, int meetingItemId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-        {
-            Meetings = _context.Meetings.ToList(),
-            SelectedMeeting = _context.Meetings.Find(meetingId),
-            SelectedMeetingItem = _context.MeetingItems.Find(meetingItemId),
-            DataEntryTarget = DataEntryTargets.MeetingItems,
-            DataDisplayMode = DataDisplayModes.Read
-
-
-        };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-            ViewBag.RiskLevel = _context.RiskLevels.Where(l =>
-                l.RiskLevelID == model.SelectedMeetingItem.RiskLevelid).First().Name;
-            return View("Main", model);
+            var item = _context.MeetingItems.Find(meetingItemId);
+            if (item == null)
+            {
+                return NotFound();
+            }
+            return MasterDetail(meetingId, item, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult InsertEntry(int meetingId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
-                SelectedMeetingItem = null,
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Insert
+            var participants = _context.MeetingParticipants
+                .Where(m => m.MeetingId == meetingId)
+                .Select(m => m.User)
+                .ToList();
+            participants.Insert(0, new ApplicationUser { Id = "", UserName = "select" });
+            ViewBag.listofparticipants = participants;
 
-                
-            };
-            List<ApplicationUser> newparticipantlist = new List<ApplicationUser>();
-
-            // getting data from database using ef core //
-            newparticipantlist = (from user in _context.MeetingParticipants.Where(m => m.MeetingId == meetingId)
-                                  select user.User).ToList();
-
-
-            // inserting selected item in list //
-            newparticipantlist.Insert(0, new ApplicationUser { Id = "", UserName = "select" });
-
-            // assigning applicationuserslist to viewbag.listofapplicationusers  //
-            ViewBag.listofparticipants = newparticipantlist;
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-
-            return View("Main", model);
+            return MasterDetail(meetingId, null, DataDisplayModes.Insert);
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken]
-        public IActionResult InsertSave( MeetingItem item)
-        //public async Task<IActionResult> InsertSave([Bind("MeetingItemID,Description,Deadline,AssignedTo,RequestedBy,ChangeRequested,VisibleInMinutes,Meetingid,RiskLevelid")] MeetingItem item)
+        public IActionResult InsertSave([Bind("Description,Deadline,AssignedTo,RequestedBy,ChangeRequested,VisibleInMinutes,Meetingid,RiskLevelid,Files")] MeetingItem item)
         {
-
-            /*  var MyMeetingItem = new MeetingItem
-              {
-                  Description = item.Description,
-                  RequestedBy = item.RequestedBy,
-                  Meetingid = item.Meetingid,
-                  VisibleInMinutes = true,
-                  Deadline = DateTime.Now
-
-
-              }; */
-
-            try
+            if (!ModelState.IsValid || !_context.Meetings.Any(m => m.MeetingID == item.Meetingid))
             {
-                //Add Guid
-                var addGuid = Convert.ToString(Guid.NewGuid());
+                return MasterDetail(item.Meetingid, null, DataDisplayModes.Insert);
+            }
 
-                if (item.Files != null)
+            if (item.Files != null)
+            {
+                var formfile = item.Files.FirstOrDefault(f => f.Length > 0);
+                if (formfile != null)
                 {
-                    foreach (var formfile in item.Files)
+                    // Path.GetFileName strips any directory part sent by the client (path traversal).
+                    var safeName = Path.GetFileName(formfile.FileName);
+                    var storedName = $"{Guid.NewGuid()}_{safeName}";
+                    var folder = Path.Combine(_environment.WebRootPath, "files");
+                    Directory.CreateDirectory(folder);
+
+                    using (var fileStream = new FileStream(Path.Combine(folder, storedName), FileMode.Create))
                     {
-                        string path = @$"{_environment.WebRootPath}\files\ {string.Concat(addGuid, formfile.FileName)}";
-
-                        using var fileStream = new FileStream(path, FileMode.Create);
                         formfile.CopyTo(fileStream);
-                        item.FileName = formfile.FileName;
-                        item.FileAttachment = path;
-                        break;
                     }
-
+                    item.FileName = safeName;
+                    item.FileType = formfile.ContentType;
+                    item.FileAttachment = "/files/" + storedName; // relative URL, not the server's disk path
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-                throw;
-            }
+
             _context.MeetingItems.Add(item);
-          _context.SaveChanges();
+            _context.SaveChanges();
 
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-                
-
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(item.Meetingid),
-                SelectedMeetingItem = _context.MeetingItems.Find(item.MeetingItemID),
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
-
-
-            };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-            
-            return View("Main", model);
+            return MasterDetail(item.Meetingid, item, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult UpdateEntry(int meetingId, int meetingItemId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-        {
-            Meetings = _context.Meetings.ToList(),
-            SelectedMeeting = _context.Meetings.Find(meetingId),
-            SelectedMeetingItem = _context.MeetingItems.Find(meetingItemId),
-            DataEntryTarget = DataEntryTargets.MeetingItems,
-            DataDisplayMode = DataDisplayModes.Update
-
-        };
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-
-            return View("Main", model);
+            var item = _context.MeetingItems.Find(meetingItemId);
+            if (item == null)
+            {
+                return NotFound();
+            }
+            return MasterDetail(meetingId, item, DataDisplayModes.Update);
         }
 
         [HttpPost]
-        public IActionResult UpdateSave(MeetingItem item)
+        public IActionResult UpdateSave([Bind("MeetingItemID,Description,Deadline,AssignedTo,RequestedBy,ChangeRequested,VisibleInMinutes,Meetingid,RiskLevelid")] MeetingItem item)
         {
+            var existing = _context.MeetingItems.Find(item.MeetingItemID);
+            if (existing == null)
+            {
+                return NotFound();
+            }
 
-            _context.MeetingItems.Update(item);
+            if (!ModelState.IsValid)
+            {
+                return MasterDetail(existing.Meetingid, item, DataDisplayModes.Update);
+            }
+
+            // Copy only the editable fields. The old code did _context.Update(item) with the posted
+            // object, which overwrote FileAttachment/FileName/FileType with NULL on every edit.
+            existing.Description = item.Description;
+            existing.Deadline = item.Deadline;
+            existing.AssignedTo = item.AssignedTo;
+            existing.RequestedBy = item.RequestedBy;
+            existing.ChangeRequested = item.ChangeRequested;
+            existing.VisibleInMinutes = item.VisibleInMinutes;
+            existing.RiskLevelid = item.RiskLevelid;
             _context.SaveChanges();
-            
-            MasterDetailViewModel model = new MasterDetailViewModel
-        {
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(item.Meetingid),
-                SelectedMeetingItem = _context.MeetingItems.Find(item.MeetingItemID),
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
 
-        };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-
-            return View("Main", model);
+            return MasterDetail(existing.Meetingid, existing, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult CancelEntry(int meetingId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
-                SelectedMeetingItem = null,
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
-
-                
-            };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-
-            return View("Main", model);
+            return MasterDetail(meetingId, null, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult CancelSelection(int meetingId)
         {
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
-                SelectedMeetingItem = null,
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
-
-            };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-
-            return View("Main", model);
+            return MasterDetail(meetingId, null, DataDisplayModes.Read);
         }
 
         [HttpPost]
         public IActionResult Delete(int meetingId, int meetingItemId)
         {
-            MeetingItem item = _context.MeetingItems.Find(meetingItemId);
+            var item = _context.MeetingItems.Find(meetingItemId);
+            if (item == null)
+            {
+                return NotFound();
+            }
             _context.MeetingItems.Remove(item);
             _context.SaveChanges();
 
-            MasterDetailViewModel model = new MasterDetailViewModel
-            {
-                Meetings = _context.Meetings.ToList(),
-                SelectedMeeting = _context.Meetings.Find(meetingId),
-                SelectedMeetingItem = null,
-                DataEntryTarget = DataEntryTargets.MeetingItems,
-                DataDisplayMode = DataDisplayModes.Read
-                
-            };
-
-            _context.Entry(model.SelectedMeeting).Collection(meeting => meeting.MeetingItems).Load();
-
-            return View("Main", model);
+            return MasterDetail(meetingId, null, DataDisplayModes.Read);
         }
 
         private bool MeetingItemExists(int id)
